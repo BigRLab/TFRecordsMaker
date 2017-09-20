@@ -1,0 +1,1 @@
+Main.py可以将图片按照一定的大小打包成tfrecords文件格式

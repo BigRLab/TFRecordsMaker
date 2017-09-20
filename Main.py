@@ -19,6 +19,7 @@ def ConverToImage(img_path):
     img = Image.open(img_path)
     img = img.resize((IMAGE_SIZE, IMAGE_SIZE), Image.ANTIALIAS)
     img.load()
+    img = img.convert("RGB")
     array = np.asarray(img, dtype=np.uint8)
     # array /= 255.
 

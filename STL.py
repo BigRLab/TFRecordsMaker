@@ -1,78 +1,65 @@
-import tflearn.datasets.mnist as mnist
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from tfutils import ClassficationMaker, ClassficationReader
+from tfutils import TFMaker, TFReader
 import tensorflow as tf
-
-
-PHRASE = 'pred'
-
-FilePath = 'Total_Data/stl'
-TRAIN_IMAGE_FILE_PATH = os.path.join(FilePath, 'train_X.bin')
-TRAIN_LABEL_FILE_PATH = os.path.join(FilePath, 'train_y.bin')
-TEST_IMAGE_FILE_PATH = os.path.join(FilePath, 'test_X.bin')
-TEST_LABEL_FILE_PATH = os.path.join(FilePath, 'test_y.bin')
-UNLABLED_IMAGE_FILE_PATH = os.path.join(FilePath, 'unlabeled_X.bin')
-IMAGE_SIZE = 96
-IMAGE_CHANNEL = 3
-N_CLASSES = 10
-
-if PHRASE == 'train':
-    fileImagePath = TRAIN_IMAGE_FILE_PATH
-    fileLabelPath = TRAIN_LABEL_FILE_PATH
-    BATCH_SIZE = 5000
-elif PHRASE == 'test':
-    fileImagePath = TEST_IMAGE_FILE_PATH
-    fileLabelPath = TEST_LABEL_FILE_PATH
-    BATCH_SIZE = 8000
-elif PHRASE == 'pred':
-    fileImagePath = UNLABLED_IMAGE_FILE_PATH
-    BATCH_SIZE = 5000
-
+import sys
+from PIL import Image
 def ToShow():
-    if PHRASE == 'train':
-        filelist = ['train_0.tfrecords']
-    elif PHRASE == 'test':
-        filelist = ['test_0.tfrecords']
-    elif PHRASE == 'pred':
-        filelist = ['pred_0.tfrecords']
+    FileList = os.path.join('GenData', 'STL')
+    TrainFile = [os.path.join(FileList, 'train.tfrecords')]
+    TestFile = os.path.join(FileList, 'test.tfrecords')
 
-    reader = ClassficationReader(filelist, BATCH_SIZE)
-    list = reader.Read((IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL))
+    reader = TFReader(TrainFile, batch_size=10)
+    fileList = reader.Read()
 
-    images = list[0]
-    labels = list[1]
     with tf.Session() as sess:
         tf.train.start_queue_runners()
-        realImages, realLabels = sess.run([images, labels])
-        for idx in range(6):
-            plt.subplot(2,3, idx + 1)
-            plt.imshow(realImages[idx])
-            plt.title(realLabels[idx])
+        realFileName = sess.run(fileList)
+        for idx in range(10):
+            curFileName = realFileName[idx]
+            print(curFileName)
+            curFileName = os.path.join(FileList, 'train', curFileName.decode())
+            img=Image.open(curFileName)
+            plt.subplot(5,5, idx + 1)
+            plt.imshow(img)
         plt.show()
 def ToTfrecords():
-    with open(fileImagePath, 'rb') as file:
-        everything = np.fromfile(file, dtype=np.uint8)
-        images = np.reshape(everything, (-1, IMAGE_CHANNEL, IMAGE_SIZE, IMAGE_SIZE))
-        image_list = np.transpose(images, (0, 3, 2, 1))
+    SourceDirPath = os.path.join('Total_Data', 'stl')
+    TargetDirPath = os.path.join('GenData', 'STL')
+    totalPhrase = ['train', 'test']
+    IMAGE_CHANNEL = 3
+    IMAGE_SIZE = 96
 
-    if PHRASE != 'pred':
-        with open(fileLabelPath, 'rb') as f:
+    for phrase in totalPhrase:
+        ImageBinFilePath = os.path.join(SourceDirPath, '%s_X.bin' % phrase)
+        LabelBinFilePath = os.path.join(SourceDirPath, '%s_y.bin' % phrase)
+
+        with open(ImageBinFilePath, 'rb') as file:
+            everything = np.fromfile(file, dtype=np.uint8)
+            images = np.reshape(everything, (-1, IMAGE_CHANNEL, IMAGE_SIZE, IMAGE_SIZE))
+            image_list = np.transpose(images, (0, 3, 2, 1))
+
+        with open(LabelBinFilePath, 'rb') as f:
             labels = np.fromfile(f, dtype=np.uint8)
             label_list = np.zeros((len(labels),), dtype=np.int32)
             for index, label in enumerate(labels):
                 label_list[index] = int(label)
-    else:
-        image_list = image_list[:BATCH_SIZE]
-        label_list = np.zeros((BATCH_SIZE,), dtype=np.int32)
 
-    maker = ClassficationMaker(image_list, label_list, BATCH_SIZE, '', PHRASE,perFileRecordCount=BATCH_SIZE)
-    maker.Make()
-    print('Done')
-    # tfm._convertToTFRecords(image_list, label_list, BATCH_SIZE,data_dir='', filename=PHRASE, perfilerecordcount=BATCH_SIZE)
+        TargetImageFilePath = os.path.join(TargetDirPath, phrase)
+        fileList = []
+        for index, imageData in enumerate(image_list):
+            TargetImageFileName = "Image_%d_%d.jpg" % (index, label_list[index])
+            fileList.append(TargetImageFileName)
+            targetImagePath = os.path.join(TargetImageFilePath, TargetImageFileName)
+            plt.imsave(targetImagePath, imageData)
+            s1 = "\r[%d / %d]" % (len(image_list) - index - 1, len(image_list))
+            sys.stdout.write(s1)
+            sys.stdout.flush()
 
+        maker = TFMaker(fileList, batchSize=len(fileList), tfFileDir=os.path.join(TargetDirPath, "%s.tfrecords" % phrase))
+        maker.Make()
 if __name__ == '__main__':
-    ToTfrecords()
-    # ToShow()
+    # ToTfrecords()
+    ToShow()
     # ToUnlabled()

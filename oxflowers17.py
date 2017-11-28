@@ -1,12 +1,11 @@
 import os
-import pickle
 import cv2
 import numpy as np
-import random
-from tfutils import ClassficationReader, ClassficationMaker
+from tfutils import TFReader, TFMaker
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from tflearn.datasets import oxflower17
+import shutil
 
 IMAGE_SIZE = 224
 IMAGE_CHANNEL = 3
@@ -20,11 +19,8 @@ def download():
 
 def readImageFromFile(imageFile):
     imgcv = cv2.imread(imageFile)
-    oriH = imgcv.shape[0]
-    oriW = imgcv.shape[1]
-    imgcv = cv2.resize(imgcv, (IMAGE_SIZE, IMAGE_SIZE))
     image = cv2.cvtColor(imgcv, cv2.COLOR_BGR2RGB).astype(np.uint8)
-    return image, oriH, oriW
+    return image
 
 def ToTfrecords():
     fileList = list()
@@ -45,49 +41,55 @@ def ToTfrecords():
                             trainFileList.append([os.path.join(path, filename), directory])
                         else:
                             testFileList.append([os.path.join(path, filename), directory])
-
-    random.shuffle(trainFileList)
-    random.shuffle(testFileList)
-
-    image_list = np.zeros((1190, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL), dtype=np.uint8)
-    label_list = np.zeros((1190,), dtype=np.int32)
-
-    for index, file in enumerate(trainFileList):
-        filename = file[0]
-        filelabel = int(file[1])
-        image,_,_ = readImageFromFile(filename)
-        image_list[index] = image
-        label_list[index] = filelabel
-
-    maker = ClassficationMaker(image_list, label_list,  1190, '', 'train', perFileRecordCount=1190)
+    tarFolder = os.path.join('GenData', 'flowers')
+    trainTarFolder = os.path.join(tarFolder, 'train')
+    TrainFileList = []
+    for file in trainFileList:
+        sourceFilePath = file[0]
+        label = file[1]
+        temp = sourceFilePath.split('/')
+        sourceFileName = temp[len(temp) - 1]
+        targetFileName = sourceFileName.split('.')[0] + '_' + label + "." + sourceFileName.split('.')[1]
+        targetFilePath = os.path.join(trainTarFolder, targetFileName)
+        shutil.copy(sourceFilePath, targetFilePath)
+        TrainFileList.append(targetFilePath)
+    maker = TFMaker(TrainFileList, batchSize=len(TrainFileList),
+                    tfFileDir=os.path.join(tarFolder, "train.tfrecords"))
+    maker.Make()
+    testTarFolder = os.path.join(tarFolder, 'test')
+    TestFileList = []
+    for file in trainFileList:
+        sourceFilePath = file[0]
+        label = file[1]
+        temp = sourceFilePath.split('/')
+        sourceFileName = temp[len(temp) - 1]
+        targetFileName = sourceFileName.split('.')[0] + '_' + label + "." + sourceFileName.split('.')[1]
+        targetFilePath = os.path.join(testTarFolder, targetFileName)
+        shutil.copy(sourceFilePath, targetFilePath)
+        TestFileList.append(targetFilePath)
+    maker = TFMaker(TestFileList, batchSize=len(TestFileList),
+                    tfFileDir=os.path.join(tarFolder, "test.tfrecords"))
     maker.Make()
 
-    image_list = np.zeros((170, IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL), dtype=np.uint8)
-    label_list = np.zeros((170,), dtype=np.int32)
-    for index, file in enumerate(testFileList):
-        filename = file[0]
-        filelabel = int(file[1])
-        image,_,_ = readImageFromFile(filename)
-        image_list[index] = image
-        label_list[index] = filelabel
 
-    maker = ClassficationMaker(image_list, label_list,  170, '', 'test', perFileRecordCount=170)
-    maker.Make()
-
-    print('Done')
 def ToShow():
-    reader = ClassficationReader(['train_0.tfrecords'], 1190)
-    list = reader.Read((IMAGE_SIZE, IMAGE_SIZE, IMAGE_CHANNEL))
-    images = list[0]
-    labels = list[1]
+    FileList = os.path.join('GenData', 'flowers')
+    TrainFile = [os.path.join(FileList, 'train.tfrecords')]
+    TestFile = os.path.join(FileList, 'test.tfrecords')
+
+    reader = TFReader(TrainFile, batch_size=10)
+    fileList = reader.Read()
 
     with tf.Session() as sess:
         tf.train.start_queue_runners()
-        realImages, realLabels = sess.run([images, labels])
-        for idx in range(6):
-            plt.subplot(2,3, idx + 1)
-            plt.imshow(realImages[idx])
-            plt.title(realLabels[idx])
+        realFileName = sess.run(fileList)
+        for idx in range(10):
+            curFileName = realFileName[idx]
+            print(curFileName)
+            curFileName = os.path.join(FileList, 'train', curFileName.decode())
+            img=readImageFromFile(curFileName)
+            plt.subplot(5,5, idx + 1)
+            plt.imshow(img)
         plt.show()
 if __name__ == '__main__':
     # download()
